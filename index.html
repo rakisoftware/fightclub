@@ -4,8 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Fight Club – Gladiator Arena</title>
-  <!-- Play.fun: after Claim Ownership, uncomment & fill: -->
-  <!-- <meta name="x-ogp-key" content="YOUR_API_KEY_HERE"> -->
+  <!-- Play.fun ownership verification -->
+  <meta name="x-ogp-key" content="af346a2d-b4cf-4e84-a483-72e7ee34c29a" id="ogp-key-meta" />
   <script src="https://cdn.play.fun/sdk/latest/index.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet"/>
   <style>
@@ -127,7 +127,6 @@
   </div>
   <div id="phase-banner"><div id="phase-text">CHOOSE YOUR ACTION</div></div>
   <div id="fighters">
-    <!-- MAXIMUS (P1) -->
     <div class="fighter-wrap" id="fighter-p1">
       <div class="player-badge p1">YOU — MAXIMUS</div>
       <div class="blood-drip">🩸</div>
@@ -197,7 +196,6 @@
       </div>
       <div class="fighter-name" id="name-p1-label">MAXIMUS</div>
     </div>
-    <!-- BRUTUS (AI) -->
     <div class="fighter-wrap" id="fighter-p2">
       <div class="player-badge p2">AI — BRUTUS</div>
       <div class="blood-drip">🩸</div>
@@ -273,7 +271,6 @@
     <button id="btn-restart">⚔️ FIGHT AGAIN ⚔️</button>
   </div>
 </div>
-
 <div id="intro-screen">
   <div id="intro-title">⚔️ FIGHT CLUB ⚔️</div>
   <div id="intro-subtitle">GLADIATORIAL ARENA</div>
@@ -291,262 +288,140 @@
     Win = <b>+100 points</b> on Play.fun! 🏆
   </div>
 </div>
-
 <script>
-// ==================== PLAY.FUN SDK (protected) ====================
-const POINTS_PER_WIN  = 100;
-const POINTS_COOLDOWN = 60 * 1000;
-let lastPointsAt = 0;
-let sdk = null;
-
-function wrapSDK(instance) {
-  const _origAdd = instance.addPoints.bind(instance);
-  const _origEnd = instance.endGame.bind(instance);
-  let _authorized = false;
-
-  instance.addPoints = function(pts) {
-    if (!_authorized) {
-      console.warn('[SDK] addPoints blocked — play the game to earn points');
-      return Promise.resolve();
-    }
-    return _origAdd(Math.min(Math.abs(parseInt(pts) || 0), POINTS_PER_WIN));
+const POINTS_PER_WIN=100,POINTS_COOLDOWN=60000;
+let lastPointsAt=0,sdk=null;
+function wrapSDK(i){
+  const a=i.addPoints.bind(i),e=i.endGame.bind(i);
+  let auth=false;
+  i.addPoints=function(p){
+    if(!auth){console.warn('[SDK] blocked');return Promise.resolve();}
+    return a(Math.min(Math.abs(parseInt(p)||0),POINTS_PER_WIN));
   };
-
-  instance.endGame = function() {
-    if (!_authorized) {
-      console.warn('[SDK] endGame blocked — play the game to earn points');
-      return Promise.resolve();
-    }
-    _authorized = false;
-    return _origEnd();
+  i.endGame=function(){
+    if(!auth){console.warn('[SDK] blocked');return Promise.resolve();}
+    auth=false;return e();
   };
-
-  instance._gameAuthorize = function() {
-    const now = Date.now();
-    const elapsed = now - lastPointsAt;
-    if (lastPointsAt > 0 && elapsed < POINTS_COOLDOWN) {
-      return { ok: false, wait: Math.ceil((POINTS_COOLDOWN - elapsed) / 1000) };
-    }
-    lastPointsAt = now;
-    _authorized = true;
-    return { ok: true };
+  i._gameAuthorize=function(){
+    const now=Date.now(),el=now-lastPointsAt;
+    if(lastPointsAt>0&&el<POINTS_COOLDOWN)return{ok:false,wait:Math.ceil((POINTS_COOLDOWN-el)/1000)};
+    lastPointsAt=now;auth=true;return{ok:true};
   };
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-  try {
-    sdk = new OpenGameSDK({ ui: { usePointsWidget: true, theme: 'dark' } });
-    sdk.on('OnReady', () => console.log('[SDK] Ready'));
-    sdk.init()
-      .then(() => { wrapSDK(sdk); console.log('[SDK] Initialized & protected'); })
-      .catch(e => console.warn('[SDK] Init error:', e));
-  } catch(e) {
-    console.warn('[SDK] Not available:', e);
-  }
+document.addEventListener('DOMContentLoaded',()=>{
+  try{
+    sdk=new OpenGameSDK({ui:{usePointsWidget:true,theme:'dark'}});
+    sdk.on('OnReady',()=>console.log('[SDK] Ready'));
+    sdk.init().then(()=>{wrapSDK(sdk);console.log('[SDK] Protected');}).catch(e=>console.warn(e));
+  }catch(e){console.warn('[SDK] N/A',e);}
 });
-
-// ==================== GAME ====================
-const ZONES = ['head','body','legs'];
-const TIMER_MAX = 10;
-const DMG_MIN = 25, DMG_MAX = 52, CRIT_THRESH = 44, LOW_HP = 33;
-
-let state = {
-  hp:[100,100], names:['MAXIMUS','BRUTUS'],
-  phase:'idle', attackTurn:0,
-  playerChoice:null, aiChoice:null,
-  timerVal:TIMER_MAX, timerInterval:null, round:0,
-};
-
-const $ = id => document.getElementById(id);
-const hpBars    = [$('hp-bar-p1'),$('hp-bar-p2')];
-const hpNums    = [$('hp-num-p1'),$('hp-num-p2')];
-const fighters  = [$('fighter-p1'),$('fighter-p2')];
-const instrEls  = [$('instr-p1'),$('instr-p2')];
-const shieldOvl = [$('shield-overlay-p1'),$('shield-overlay-p2')];
-const timerNum  = $('timer-number');
-const timerBar  = $('timer-bar-inner');
-const phaseText = $('phase-text');
-const actionLog = $('action-log');
-const critFlash = $('crit-flash');
-const critText  = $('crit-text');
-const roundBanner    = $('round-banner');
-const roundBannerTxt = $('round-banner-text');
-const resultOverlay  = $('result-overlay');
-const resultTitle    = $('result-title');
-const resultSub      = $('result-sub');
-const resultPoints   = $('result-points');
-const aiThinking     = $('ai-thinking');
-const zoneEls = [
-  {head:$('p1-zone-head'),body:$('p1-zone-body'),legs:$('p1-zone-legs')},
-  {head:$('p2-zone-head'),body:$('p2-zone-body'),legs:$('p2-zone-legs')},
-];
-
+const ZONES=['head','body','legs'],TIMER_MAX=10,DMG_MIN=25,DMG_MAX=52,CRIT_THRESH=44,LOW_HP=33;
+let state={hp:[100,100],names:['MAXIMUS','BRUTUS'],phase:'idle',attackTurn:0,playerChoice:null,aiChoice:null,timerVal:TIMER_MAX,timerInterval:null,round:0};
+const $=id=>document.getElementById(id);
+const hpBars=[$('hp-bar-p1'),$('hp-bar-p2')],hpNums=[$('hp-num-p1'),$('hp-num-p2')],fighters=[$('fighter-p1'),$('fighter-p2')],instrEls=[$('instr-p1'),$('instr-p2')],shieldOvl=[$('shield-overlay-p1'),$('shield-overlay-p2')];
+const timerNum=$('timer-number'),timerBar=$('timer-bar-inner'),phaseText=$('phase-text'),actionLog=$('action-log'),critFlash=$('crit-flash'),critText=$('crit-text'),roundBanner=$('round-banner'),roundBannerTxt=$('round-banner-text'),resultOverlay=$('result-overlay'),resultTitle=$('result-title'),resultSub=$('result-sub'),resultPoints=$('result-points'),aiThinking=$('ai-thinking');
+const zoneEls=[{head:$('p1-zone-head'),body:$('p1-zone-body'),legs:$('p1-zone-legs')},{head:$('p2-zone-head'),body:$('p2-zone-body'),legs:$('p2-zone-legs')}];
 $('btn-start-game').addEventListener('click',()=>{
-  const n1=($('input-p1').value.trim().toUpperCase()||'MAXIMUS').slice(0,12);
-  state.names[0]=n1; $('name-p1-hud').textContent=n1; $('name-p1-label').textContent=n1;
-  $('intro-screen').style.display='none'; startRound();
+  const n=($('input-p1').value.trim().toUpperCase()||'MAXIMUS').slice(0,12);
+  state.names[0]=n;$('name-p1-hud').textContent=n;$('name-p1-label').textContent=n;
+  $('intro-screen').style.display='none';startRound();
 });
 $('btn-restart').addEventListener('click',()=>{
-  resultOverlay.classList.remove('show');
-  state.hp=[100,100]; state.round=0; state.attackTurn=0;
-  updateHPBars(); updateLowHP(); startRound();
+  resultOverlay.classList.remove('show');state.hp=[100,100];state.round=0;state.attackTurn=0;
+  updateHPBars();updateLowHP();startRound();
 });
-
 document.querySelectorAll('.zone-circle').forEach(el=>{
   el.addEventListener('click',()=>{
-    if(state.phase!=='choosing'||state.playerChoice!==null) return;
-    const inP1=!!el.closest('#zones-p1'), inP2=!!el.closest('#zones-p2');
-    const zone=el.dataset.zone;
+    if(state.phase!=='choosing'||state.playerChoice!==null)return;
+    const inP1=!!el.closest('#zones-p1'),inP2=!!el.closest('#zones-p2'),zone=el.dataset.zone;
     if(state.attackTurn===0){
-      if(!inP2) return;
-      state.playerChoice=zone;
+      if(!inP2)return;state.playerChoice=zone;
       ZONES.forEach(z=>zoneEls[1][z].classList.remove('attack-zone','defend-zone','selected-zone'));
-      zoneEls[1][zone].classList.add('selected-zone');
-      instrEls[0].textContent='⚔️ Striking '+zone.toUpperCase()+'...';
-    } else {
-      if(!inP1) return;
-      state.playerChoice=zone;
+      zoneEls[1][zone].classList.add('selected-zone');instrEls[0].textContent='⚔️ Striking '+zone.toUpperCase()+'...';
+    }else{
+      if(!inP1)return;state.playerChoice=zone;
       ZONES.forEach(z=>zoneEls[0][z].classList.remove('attack-zone','defend-zone','selected-zone'));
-      zoneEls[0][zone].classList.add('selected-zone');
-      instrEls[0].textContent='🛡️ Guarding '+zone.toUpperCase()+'...';
+      zoneEls[0][zone].classList.add('selected-zone');instrEls[0].textContent='🛡️ Guarding '+zone.toUpperCase()+'...';
     }
     checkReady();
   });
 });
-
 function clearAllZones(){document.querySelectorAll('.zone-circle').forEach(el=>el.classList.remove('attack-zone','defend-zone','selected-zone'));}
-function activateZones(i,type){ZONES.forEach(z=>{zoneEls[i][z].classList.remove('attack-zone','defend-zone','selected-zone');zoneEls[i][z].classList.add(type==='attack'?'attack-zone':'defend-zone');});}
-
+function activateZones(i,t){ZONES.forEach(z=>{zoneEls[i][z].classList.remove('attack-zone','defend-zone','selected-zone');zoneEls[i][z].classList.add(t==='attack'?'attack-zone':'defend-zone');});}
 function startTimer(){
-  state.timerVal=TIMER_MAX; timerNum.textContent=TIMER_MAX;
-  timerNum.classList.remove('urgent'); timerBar.style.width='100%';
-  timerBar.style.background='linear-gradient(to right,#ff4400,#ffd700)';
+  state.timerVal=TIMER_MAX;timerNum.textContent=TIMER_MAX;timerNum.classList.remove('urgent');
+  timerBar.style.width='100%';timerBar.style.background='linear-gradient(to right,#ff4400,#ffd700)';
   clearInterval(state.timerInterval);
   state.timerInterval=setInterval(()=>{
-    state.timerVal-=0.25;
-    const pct=Math.max(0,state.timerVal/TIMER_MAX*100);
-    timerNum.textContent=Math.ceil(state.timerVal); timerBar.style.width=pct+'%';
+    state.timerVal-=0.25;const p=Math.max(0,state.timerVal/TIMER_MAX*100);
+    timerNum.textContent=Math.ceil(state.timerVal);timerBar.style.width=p+'%';
     if(state.timerVal<=3){timerNum.classList.add('urgent');timerBar.style.background='#ff2200';}
     if(state.timerVal<=0){
       clearInterval(state.timerInterval);
-      if(state.playerChoice===null) state.playerChoice=ZONES[Math.floor(Math.random()*3)];
-      if(state.aiChoice===null)     state.aiChoice=ZONES[Math.floor(Math.random()*3)];
+      if(state.playerChoice===null)state.playerChoice=ZONES[Math.floor(Math.random()*3)];
+      if(state.aiChoice===null)state.aiChoice=ZONES[Math.floor(Math.random()*3)];
       resolveRound();
     }
   },250);
 }
 function stopTimer(){clearInterval(state.timerInterval);timerNum.classList.remove('urgent');}
 function aiChoose(){return ZONES[Math.floor(Math.random()*3)];}
-
 function startRound(){
-  state.round++; state.playerChoice=null; state.aiChoice=aiChoose();
-  state.phase='choosing'; clearAllZones(); aiThinking.classList.remove('show');
+  state.round++;state.playerChoice=null;state.aiChoice=aiChoose();state.phase='choosing';
+  clearAllZones();aiThinking.classList.remove('show');
   if(state.attackTurn===0){
-    activateZones(1,'attack');
-    instrEls[0].textContent='⚔️ Strike Brutus — choose a zone!';
+    activateZones(1,'attack');instrEls[0].textContent='⚔️ Strike Brutus — choose a zone!';
     phaseText.textContent=`⚔️ ${state.names[0]} ATTACKS — pick a zone on Brutus`;
-  } else {
-    activateZones(0,'defend');
-    instrEls[0].textContent='🛡️ Guard yourself — choose a zone!';
-    phaseText.textContent=`🛡️ Brutus ATTACKS — guard a zone!`;
-    aiThinking.classList.add('show');
+  }else{
+    activateZones(0,'defend');instrEls[0].textContent='🛡️ Guard yourself — choose a zone!';
+    phaseText.textContent=`🛡️ Brutus ATTACKS — guard a zone!`;aiThinking.classList.add('show');
   }
-  setLog(''); startTimer();
+  setLog('');startTimer();
 }
-function checkReady(){
-  if(state.playerChoice!==null&&state.aiChoice!==null)
-    setTimeout(()=>{stopTimer();resolveRound();},450);
-}
+function checkReady(){if(state.playerChoice!==null&&state.aiChoice!==null)setTimeout(()=>{stopTimer();resolveRound();},450);}
 function resolveRound(){
-  if(state.phase!=='choosing') return;
-  state.phase='resolving'; stopTimer(); clearAllZones();
-  aiThinking.classList.remove('show'); instrEls[0].textContent='';
-  const att=state.attackTurn, def=1-att;
-  const aZone=att===0?state.playerChoice:state.aiChoice;
-  const dZone=att===0?state.aiChoice:state.playerChoice;
-  const hit=aZone!==dZone;
+  if(state.phase!=='choosing')return;state.phase='resolving';stopTimer();clearAllZones();
+  aiThinking.classList.remove('show');instrEls[0].textContent='';
+  const att=state.attackTurn,def=1-att;
+  const aZ=att===0?state.playerChoice:state.aiChoice,dZ=att===0?state.aiChoice:state.playerChoice;
+  const hit=aZ!==dZ;
   zoneEls[1][state.aiChoice].classList.add(att===0?'defend-zone':'attack-zone');
   setTimeout(()=>clearAllZones(),1200);
   if(hit){
-    const dmg=DMG_MIN+Math.floor(Math.random()*(DMG_MAX-DMG_MIN+1));
-    const isCrit=dmg>=CRIT_THRESH;
+    const dmg=DMG_MIN+Math.floor(Math.random()*(DMG_MAX-DMG_MIN+1)),isCrit=dmg>=CRIT_THRESH;
     state.hp[def]=Math.max(0,state.hp[def]-dmg);
     fighters[def].classList.add(isCrit?'crit-hit':'hurt');
     setTimeout(()=>fighters[def].classList.remove('crit-hit','hurt'),750);
-    spawnDmgPopup(def,dmg,isCrit?'crit':'normal');
-    updateHPBars(); updateLowHP(); if(isCrit) triggerCrit();
+    spawnDmgPopup(def,dmg,isCrit?'crit':'normal');updateHPBars();updateLowHP();if(isCrit)triggerCrit();
     const ze={head:'💀',body:'🩸',legs:'🦵'};
-    setLog(`${state.names[att]} strikes ${state.names[def]}'s ${aZone.toUpperCase()} ${ze[aZone]||''} for ${dmg} dmg!${isCrit?' ⚡ CRITICAL!':''}`);
+    setLog(`${state.names[att]} strikes ${state.names[def]}'s ${aZ.toUpperCase()} ${ze[aZ]||''} for ${dmg} dmg!${isCrit?' ⚡ CRITICAL!':''}`);
     showBanner(isCrit?`💥 ${dmg} CRITICAL!`:`🗡️ HIT — ${dmg} damage`,1700);
     if(state.hp[def]<=0){setTimeout(()=>endGame(att),1900);return;}
-  } else {
-    shieldOvl[def].classList.add('show');
-    setTimeout(()=>shieldOvl[def].classList.remove('show'),950);
+  }else{
+    shieldOvl[def].classList.add('show');setTimeout(()=>shieldOvl[def].classList.remove('show'),950);
     spawnDmgPopup(def,0,'blocked');
-    const who=att===0?`Brutus guarded ${dZone.toUpperCase()}`:`You blocked ${dZone.toUpperCase()}`;
-    setLog(`${state.names[att]} attacks ${aZone.toUpperCase()} — ${who}! 🛡️`);
-    showBanner('🛡️ BLOCKED!',1400);
+    const who=att===0?`Brutus guarded ${dZ.toUpperCase()}`:`You blocked ${dZ.toUpperCase()}`;
+    setLog(`${state.names[att]} attacks ${aZ.toUpperCase()} — ${who}! 🛡️`);showBanner('🛡️ BLOCKED!',1400);
   }
   state.attackTurn=1-state.attackTurn;
-  setTimeout(()=>{if(state.phase!=='gameover') startRound();},2100);
+  setTimeout(()=>{if(state.phase!=='gameover')startRound();},2100);
 }
-function updateHPBars(){
-  for(let i=0;i<2;i++){
-    const p=Math.max(0,state.hp[i]);
-    hpBars[i].style.width=p+'%'; hpNums[i].textContent=state.hp[i]+' HP';
-    if(p<=33) hpBars[i].style.background='linear-gradient(to right,#660000,#cc0000)';
-    else if(p<=60) hpBars[i].style.background='linear-gradient(to right,#884400,#cc6600)';
-  }
-}
-function updateLowHP(){for(let i=0;i<2;i++) fighters[i].classList.toggle('low-hp',state.hp[i]<LOW_HP);}
-function spawnDmgPopup(idx,dmg,type){
-  const el=document.createElement('div');
-  el.className='damage-popup '+type;
-  el.textContent=type==='blocked'?'BLOCKED!':(type==='crit'?'💥 '+dmg:String(dmg));
-  el.style.left=(idx===0?'14%':'62%'); el.style.top='28%';
-  $('arena').appendChild(el); setTimeout(()=>el.remove(),1400);
-}
-function triggerCrit(){
-  critFlash.classList.add('active'); critText.classList.add('show'); spawnSparks();
-  setTimeout(()=>{critFlash.classList.remove('active');critText.classList.remove('show');},1600);
-}
-function spawnSparks(){
-  for(let i=0;i<20;i++){
-    const s=document.createElement('div'); s.className='spark';
-    const angle=Math.random()*Math.PI*2, dist=70+Math.random()*130;
-    const sx=window.innerWidth/2, sy=window.innerHeight*.38;
-    s.style.cssText=`left:${sx}px;top:${sy}px;width:${4+Math.random()*6}px;height:${4+Math.random()*6}px;background:${Math.random()>.5?'#ffd700':'#ff5500'};position:absolute;border-radius:50%;pointer-events:none;z-index:32`;
-    $('arena').appendChild(s);
-    const tx=sx+Math.cos(angle)*dist,ty=sy+Math.sin(angle)*dist;
-    s.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${tx-sx}px,${ty-sy}px) scale(0)`,opacity:0}],
-      {duration:500+Math.random()*400,easing:'ease-out'}).onfinish=()=>s.remove();
-  }
-}
-function showBanner(txt,dur){
-  roundBannerTxt.textContent=txt; roundBanner.classList.add('show');
-  setTimeout(()=>roundBanner.classList.remove('show'),dur);
-}
-function setLog(txt){actionLog.textContent=txt;}
-
-function endGame(winnerIdx){
-  state.phase='gameover'; stopTimer(); clearAllZones();
-  const won=winnerIdx===0;
+function updateHPBars(){for(let i=0;i<2;i++){const p=Math.max(0,state.hp[i]);hpBars[i].style.width=p+'%';hpNums[i].textContent=state.hp[i]+' HP';if(p<=33)hpBars[i].style.background='linear-gradient(to right,#660000,#cc0000)';else if(p<=60)hpBars[i].style.background='linear-gradient(to right,#884400,#cc6600)';}}
+function updateLowHP(){for(let i=0;i<2;i++)fighters[i].classList.toggle('low-hp',state.hp[i]<LOW_HP);}
+function spawnDmgPopup(idx,dmg,type){const el=document.createElement('div');el.className='damage-popup '+type;el.textContent=type==='blocked'?'BLOCKED!':(type==='crit'?'💥 '+dmg:String(dmg));el.style.left=(idx===0?'14%':'62%');el.style.top='28%';$('arena').appendChild(el);setTimeout(()=>el.remove(),1400);}
+function triggerCrit(){critFlash.classList.add('active');critText.classList.add('show');spawnSparks();setTimeout(()=>{critFlash.classList.remove('active');critText.classList.remove('show');},1600);}
+function spawnSparks(){for(let i=0;i<20;i++){const s=document.createElement('div');s.className='spark';const angle=Math.random()*Math.PI*2,dist=70+Math.random()*130,sx=window.innerWidth/2,sy=window.innerHeight*.38;s.style.cssText=`left:${sx}px;top:${sy}px;width:${4+Math.random()*6}px;height:${4+Math.random()*6}px;background:${Math.random()>.5?'#ffd700':'#ff5500'};position:absolute;border-radius:50%;pointer-events:none;z-index:32`;$('arena').appendChild(s);const tx=sx+Math.cos(angle)*dist,ty=sy+Math.sin(angle)*dist;s.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${tx-sx}px,${ty-sy}px) scale(0)`,opacity:0}],{duration:500+Math.random()*400,easing:'ease-out'}).onfinish=()=>s.remove();}}
+function showBanner(t,d){roundBannerTxt.textContent=t;roundBanner.classList.add('show');setTimeout(()=>roundBanner.classList.remove('show'),d);}
+function setLog(t){actionLog.textContent=t;}
+function endGame(w){
+  state.phase='gameover';stopTimer();clearAllZones();const won=w===0;
   resultTitle.textContent=won?'🏆 VICTORY!':'💀 DEFEAT...';
-  resultSub.textContent=won
-    ?`Brutus has fallen! Rome cheers for ${state.names[0]}!`
-    :`${state.names[0]} has been defeated. Brutus reigns supreme!`;
-
-  if(won && sdk && sdk._gameAuthorize){
+  resultSub.textContent=won?`Brutus has fallen! Rome cheers for ${state.names[0]}!`:`${state.names[0]} has been defeated. Brutus reigns supreme!`;
+  if(won&&sdk&&sdk._gameAuthorize){
     const auth=sdk._gameAuthorize();
-    if(auth.ok){
-      resultPoints.textContent=`+${POINTS_PER_WIN} points awarded! 🏅`;
-      sdk.addPoints(POINTS_PER_WIN).then(()=>sdk.endGame()).catch(e=>console.warn('[SDK]',e));
-    } else {
-      resultPoints.textContent=`⏳ Points cooldown — wait ${auth.wait}s`;
-    }
-  } else {
-    resultPoints.textContent='';
-  }
+    if(auth.ok){resultPoints.textContent=`+${POINTS_PER_WIN} points awarded! 🏅`;sdk.addPoints(POINTS_PER_WIN).then(()=>sdk.endGame()).catch(e=>console.warn(e));}
+    else{resultPoints.textContent=`⏳ Points cooldown — wait ${auth.wait}s`;}
+  }else{resultPoints.textContent='';}
   resultOverlay.classList.add('show');
 }
 </script>

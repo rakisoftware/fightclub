@@ -6,7 +6,7 @@
   <title>Fight Club – Gladiator Arena</title>
   <!-- Play.fun ownership verification -->
   <meta name="x-ogp-key" content="af346a2d-b4cf-4e84-a483-72e7ee34c29a" id="ogp-key-meta" />
-  <script src="https://cdn.play.fun/sdk/latest/index.js"></script>
+  <script src="https://sdk.play.fun"></script>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet"/>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
@@ -289,13 +289,30 @@
   </div>
 </div>
 <script>
-const POINTS_PER_WIN=100;
-let sdk=null;
+const POINTS_PER_WIN=100,POINTS_COOLDOWN=60000;
+let lastPointsAt=0,sdk=null;
+function wrapSDK(i){
+  const a=i.addPoints.bind(i),e=i.endGame.bind(i);
+  let auth=false;
+  i.addPoints=function(p){
+    if(!auth){console.warn('[SDK] blocked');return Promise.resolve();}
+    return a(Math.min(Math.abs(parseInt(p)||0),POINTS_PER_WIN));
+  };
+  i.endGame=function(){
+    if(!auth){console.warn('[SDK] blocked');return Promise.resolve();}
+    auth=false;return e();
+  };
+  i._gameAuthorize=function(){
+    const now=Date.now(),el=now-lastPointsAt;
+    if(lastPointsAt>0&&el<POINTS_COOLDOWN)return{ok:false,wait:Math.ceil((POINTS_COOLDOWN-el)/1000)};
+    lastPointsAt=now;auth=true;return{ok:true};
+  };
+}
 document.addEventListener('DOMContentLoaded',()=>{
   try{
     sdk=new OpenGameSDK({ui:{usePointsWidget:true,theme:'dark'}});
     sdk.on('OnReady',()=>console.log('[SDK] Ready'));
-    sdk.init().catch(e=>console.warn('[SDK] init error',e));
+    sdk.init().then(()=>{wrapSDK(sdk);console.log('[SDK] Protected');}).catch(e=>console.warn(e));
   }catch(e){console.warn('[SDK] N/A',e);}
 });
 const ZONES=['head','body','legs'],TIMER_MAX=10,DMG_MIN=25,DMG_MAX=52,CRIT_THRESH=44,LOW_HP=33;
@@ -400,13 +417,11 @@ function endGame(w){
   state.phase='gameover';stopTimer();clearAllZones();const won=w===0;
   resultTitle.textContent=won?'🏆 VICTORY!':'💀 DEFEAT...';
   resultSub.textContent=won?`Brutus has fallen! Rome cheers for ${state.names[0]}!`:`${state.names[0]} has been defeated. Brutus reigns supreme!`;
-  if(won&&sdk){
-    resultPoints.textContent=`+${POINTS_PER_WIN} points awarded! 🏅`;
-    sdk.addPoints(POINTS_PER_WIN).then(()=>sdk.endGame()).catch(e=>console.warn('[SDK] error',e));
-  }else{
-    if(sdk) sdk.endGame().catch(e=>console.warn('[SDK] error',e));
-    resultPoints.textContent='';
-  }
+  if(won&&sdk&&sdk._gameAuthorize){
+    const auth=sdk._gameAuthorize();
+    if(auth.ok){resultPoints.textContent=`+${POINTS_PER_WIN} points awarded! 🏅`;sdk.addPoints(POINTS_PER_WIN).then(()=>sdk.endGame()).catch(e=>console.warn(e));}
+    else{resultPoints.textContent=`⏳ Points cooldown — wait ${auth.wait}s`;}
+  }else{resultPoints.textContent='';}
   resultOverlay.classList.add('show');
 }
 </script>

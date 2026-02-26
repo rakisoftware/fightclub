@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Fight Club – Gladiator Arena</title>
+  <!-- Play.fun: after Claim Ownership, uncomment & fill: -->
+  <!-- <meta name="x-ogp-key" content="YOUR_API_KEY_HERE"> -->
+  <script src="https://cdn.play.fun/sdk/latest/index.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@700&display=swap" rel="stylesheet"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Cinzel',serif;overflow:hidden;height:100vh;width:100vw;background:#1a0a00;user-select:none;}
+    #arena{position:relative;width:100vw;height:100vh;overflow:hidden;background:radial-gradient(ellipse at center bottom,#3d1a00 0%,#1a0800 40%,#0d0400 100%);}
+    #arena::before{content:'';position:absolute;bottom:0;left:0;right:0;height:32%;background:linear-gradient(to top,#8b5a1a 0%,#a0693d 40%,#7a4a10 80%,transparent 100%);border-radius:50% 50% 0 0/10% 10% 0 0;}
+    #arena::after{content:'';position:absolute;top:-18%;left:-8%;right:-8%;height:68%;border:8px solid #5c3010;border-radius:50%;box-shadow:inset 0 0 80px rgba(0,0,0,.6),0 0 40px rgba(180,80,0,.3);pointer-events:none;}
+    #arena-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1) 0%,rgba(0,0,0,0) 50%,rgba(20,10,0,.5) 100%);pointer-events:none;z-index:1;}
+    .torch{position:absolute;top:10%;font-size:2.4em;animation:flicker .3s infinite alternate;filter:drop-shadow(0 0 14px #ff6600);z-index:3;}
+    .torch.left{left:6%}.torch.right{right:6%}
+    @keyframes flicker{from{opacity:.85;transform:scaleY(1) rotate(-2deg)}to{opacity:1;transform:scaleY(1.08) rotate(2deg)}}
+    #hud{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:flex-start;justify-content:space-between;padding:10px 18px 0;gap:8px;}
+    .hp-panel{flex:1;max-width:38%}
+    .hp-label{font-size:.72em;color:#ffd700;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px;text-shadow:0 0 8px #ff8800;}
+    .hp-bar-outer{background:#1a0500;border:2px solid #8b4513;border-radius:6px;height:16px;overflow:hidden;}
+    .hp-bar-inner{height:100%;border-radius:4px;transition:width .4s,background .4s;}
+    .hp-bar-inner.p1{background:linear-gradient(to right,#cc2200,#ff6600);}
+    .hp-bar-inner.p2{background:linear-gradient(to right,#0055cc,#00aaff);float:right;}
+    .hp-number{font-size:.78em;color:#ffcc88;margin-top:2px;font-weight:700;}
+    .hp-panel.right .hp-number{text-align:right}
+    #timer-panel{text-align:center;min-width:110px}
+    #timer-number{font-size:3.4em;font-weight:900;color:#ffd700;text-shadow:0 0 20px #ff8800,0 0 40px #ff4400;line-height:1;font-family:'Cinzel Decorative',serif;transition:color .3s;}
+    #timer-number.urgent{color:#ff2200;animation:pulse-t .5s infinite alternate}
+    @keyframes pulse-t{from{text-shadow:0 0 20px #ff0000;transform:scale(1)}to{text-shadow:0 0 50px #ff0000;transform:scale(1.1)}}
+    #timer-bar-outer{background:#1a0500;border:2px solid #8b4513;border-radius:6px;height:9px;overflow:hidden;margin-top:3px;}
+    #timer-bar-inner{height:100%;border-radius:4px;background:linear-gradient(to right,#ff4400,#ffd700);transition:width .25s linear,background .3s;}
+    #phase-banner{position:absolute;top:105px;left:50%;transform:translateX(-50%);z-index:20;text-align:center;pointer-events:none;}
+    #phase-text{font-size:.88em;color:#ffdd88;letter-spacing:2px;text-transform:uppercase;text-shadow:0 2px 8px #000,0 0 12px #ff6600;}
+    #fighters{position:absolute;bottom:22%;left:0;right:0;display:flex;justify-content:space-around;align-items:flex-end;z-index:10;padding:0 4%;}
+    .fighter-wrap{position:relative;display:flex;flex-direction:column;align-items:center;transition:transform .4s;}
+    .fighter-wrap.hurt{animation:hurt-shake .4s}
+    @keyframes hurt-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-14px) rotate(-3deg)}40%{transform:translateX(14px) rotate(3deg)}60%{transform:translateX(-9px)}80%{transform:translateX(9px)}}
+    .fighter-wrap.crit-hit{animation:crit-shake .65s}
+    @keyframes crit-shake{0%,100%{transform:translateX(0) scale(1)}15%{transform:translateX(-22px) scale(.9) rotate(-5deg)}30%{transform:translateX(22px) scale(1.1) rotate(5deg)}55%{transform:translateX(-14px) scale(.96)}75%{transform:translateX(14px) scale(1.04)}}
+    .gladiator-svg{width:170px;height:270px;filter:drop-shadow(0 10px 20px rgba(0,0,0,.8));transition:filter .3s;}
+    .fighter-wrap.low-hp .gladiator-svg{filter:drop-shadow(0 10px 20px rgba(0,0,0,.8)) drop-shadow(0 0 14px #cc0000);}
+    .fighter-name{font-size:.82em;color:#ffd700;letter-spacing:2px;text-shadow:0 0 8px #ff6600,0 2px 6px #000;margin-top:4px;}
+    .blood-drip{display:none;position:absolute;top:10px;font-size:1.4em;animation:drip 1.6s infinite;filter:drop-shadow(0 0 4px red);}
+    .fighter-wrap.low-hp .blood-drip{display:block}
+    @keyframes drip{0%{opacity:1;transform:translateY(0)}80%{opacity:1;transform:translateY(32px)}100%{opacity:0;transform:translateY(38px)}}
+    .zone-circles{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+    .zone-circle{position:absolute;border-radius:50%;pointer-events:all;cursor:pointer;border:3px solid transparent;transition:transform .15s,box-shadow .15s;display:flex;align-items:center;justify-content:center;}
+    .zone-circle .zone-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:.64em;font-weight:900;color:rgba(255,235,150,.95);text-shadow:0 0 10px #000,0 2px 5px #000;white-space:nowrap;letter-spacing:2px;pointer-events:none;text-transform:uppercase;font-family:'Cinzel',serif;}
+    .zone-circle.attack-zone{background:rgba(255,100,0,.18);border-color:rgba(255,150,0,.75);box-shadow:0 0 18px rgba(255,100,0,.5),inset 0 0 10px rgba(255,100,0,.3);animation:zpulse-o 1.1s infinite alternate;}
+    @keyframes zpulse-o{from{box-shadow:0 0 12px rgba(255,100,0,.4),inset 0 0 8px rgba(255,100,0,.2);transform:scale(1)}to{box-shadow:0 0 28px rgba(255,170,0,.9),inset 0 0 16px rgba(255,160,0,.4);transform:scale(1.07)}}
+    .zone-circle.defend-zone{background:rgba(0,120,255,.18);border-color:rgba(80,170,255,.75);box-shadow:0 0 18px rgba(0,120,255,.5),inset 0 0 10px rgba(0,120,255,.3);animation:zpulse-b 1.1s infinite alternate;}
+    @keyframes zpulse-b{from{box-shadow:0 0 12px rgba(0,100,255,.4),inset 0 0 8px rgba(0,100,255,.2);transform:scale(1)}to{box-shadow:0 0 28px rgba(80,170,255,.9),inset 0 0 16px rgba(80,170,255,.4);transform:scale(1.07)}}
+    .zone-circle.selected-zone{background:rgba(255,215,0,.38)!important;border-color:#ffd700!important;box-shadow:0 0 32px rgba(255,215,0,.95)!important;animation:none!important;transform:scale(1.12);}
+    .zone-circle:hover{transform:scale(1.13)}
+    .zone-circle.selected-zone .zone-label{color:#fff;text-shadow:0 0 12px #ffd700,0 0 20px #ffd700;}
+    .damage-popup{position:absolute;font-size:2.6em;font-weight:900;pointer-events:none;z-index:30;animation:float-up 1.3s ease-out forwards;text-shadow:0 0 20px currentColor;font-family:'Cinzel Decorative',serif;}
+    .damage-popup.normal{color:#ff5500}.damage-popup.crit{color:#ffd700;font-size:3.6em}.damage-popup.blocked{color:#88ccff;font-size:1.8em}
+    @keyframes float-up{0%{opacity:1;transform:translateY(0) scale(.5)}20%{opacity:1;transform:translateY(-22px) scale(1.3)}80%{opacity:.8;transform:translateY(-75px) scale(1)}100%{opacity:0;transform:translateY(-110px) scale(.8)}}
+    #crit-flash{position:absolute;inset:0;background:radial-gradient(circle,rgba(255,215,0,.45) 0%,transparent 70%);z-index:25;pointer-events:none;opacity:0;}
+    #crit-flash.active{animation:cfa .65s forwards}
+    @keyframes cfa{0%{opacity:.9}50%{opacity:.6}100%{opacity:0}}
+    #crit-text{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%) scale(0);font-size:3.2em;color:#ffd700;font-family:'Cinzel Decorative',serif;font-weight:900;text-shadow:0 0 30px #ff8800,0 0 60px #ff4400;z-index:35;pointer-events:none;white-space:nowrap;}
+    #crit-text.show{animation:cta 1.5s forwards}
+    @keyframes cta{0%{transform:translate(-50%,-50%) scale(0) rotate(-10deg);opacity:0}20%{transform:translate(-50%,-50%) scale(1.3) rotate(4deg);opacity:1}55%{transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1}85%{transform:translate(-50%,-50%) scale(1);opacity:.7}100%{transform:translate(-50%,-50%) scale(.8);opacity:0}}
+    .spark{position:absolute;border-radius:50%;pointer-events:none;z-index:32;}
+    #round-banner{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);z-index:40;text-align:center;pointer-events:none;}
+    #round-banner.show{animation:bp 1.9s forwards}
+    @keyframes bp{0%{transform:translate(-50%,-50%) scale(0);opacity:0}18%{transform:translate(-50%,-50%) scale(1.15);opacity:1}55%{transform:translate(-50%,-50%) scale(1);opacity:1}80%{transform:translate(-50%,-50%) scale(1);opacity:1}100%{transform:translate(-50%,-50%) scale(.9);opacity:0}}
+    #round-banner-text{font-size:2.1em;font-family:'Cinzel Decorative',serif;color:#ffd700;text-shadow:0 0 20px #ff8800,0 0 40px #ff4400;background:rgba(0,0,0,.7);padding:14px 32px;border:3px solid #8b4513;border-radius:12px;}
+    .shield-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;font-size:3em;display:flex;align-items:center;justify-content:center;}
+    .shield-overlay.show{animation:shpop .9s forwards}
+    @keyframes shpop{0%{opacity:0;transform:scale(.4)}30%{opacity:1;transform:scale(1.35)}70%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.85)}}
+    #action-log{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);z-index:20;text-align:center;color:#ffcc88;font-size:.76em;letter-spacing:1px;text-shadow:0 2px 6px #000;min-height:22px;max-width:82%;}
+    #result-overlay{position:absolute;inset:0;background:rgba(0,0,0,.85);z-index:60;display:none;align-items:center;justify-content:center;flex-direction:column;gap:20px;}
+    #result-overlay.show{display:flex}
+    #result-title{font-size:2.8em;color:#ffd700;font-family:'Cinzel Decorative',serif;text-shadow:0 0 30px #ff8800,0 0 60px #ff4400;text-align:center;}
+    #result-sub{font-size:.95em;color:#ffcc88;letter-spacing:3px;text-align:center}
+    #result-points{font-size:1em;color:#ffd700;letter-spacing:2px;text-align:center;text-shadow:0 0 10px #ff8800;min-height:24px;}
+    #btn-restart{padding:13px 38px;font-size:1.05em;font-family:'Cinzel',serif;font-weight:700;color:#1a0a00;background:linear-gradient(to bottom,#ffd700,#c87000);border:none;border-radius:8px;cursor:pointer;letter-spacing:2px;box-shadow:0 0 20px rgba(255,180,0,.6);transition:transform .15s;}
+    #btn-restart:hover{transform:scale(1.06)}
+    #intro-screen{position:absolute;inset:0;background:rgba(0,0,0,.88);z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;}
+    #intro-title{font-size:3.6em;color:#ffd700;font-family:'Cinzel Decorative',serif;text-shadow:0 0 30px #ff8800,0 0 60px #ff4400;letter-spacing:4px;text-align:center;}
+    #intro-subtitle{color:#c8965a;font-size:1em;letter-spacing:3px;text-align:center}
+    .player-input-group{display:flex;flex-direction:column;align-items:center;gap:7px}
+    .player-input-group label{color:#ffd700;font-size:.83em;letter-spacing:2px}
+    .player-input-group input{background:#2a1000;border:2px solid #8b4513;border-radius:6px;padding:7px 12px;color:#ffcc88;font-family:'Cinzel',serif;font-size:.95em;text-align:center;outline:none;width:150px;}
+    .player-input-group input:focus{border-color:#ffd700}
+    #btn-start-game{padding:13px 44px;font-size:1.15em;font-family:'Cinzel',serif;font-weight:700;color:#1a0a00;background:linear-gradient(to bottom,#ffd700,#c87000);border:none;border-radius:8px;cursor:pointer;letter-spacing:3px;box-shadow:0 0 24px rgba(255,180,0,.7);transition:transform .15s;}
+    #btn-start-game:hover{transform:scale(1.05)}
+    #intro-rules{color:#a07040;font-size:.73em;letter-spacing:1px;text-align:center;max-width:460px;line-height:1.8;}
+    .fighter-instruction{font-size:.7em;color:#ffd700;letter-spacing:1px;white-space:nowrap;text-shadow:0 0 6px #000,0 0 10px #000;margin-bottom:4px;min-height:18px;text-align:center;}
+    .player-badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.68em;letter-spacing:2px;margin-bottom:3px;}
+    .player-badge.p1{background:rgba(200,30,0,.3);border:1px solid #cc2200;color:#ff8866}
+    .player-badge.p2{background:rgba(0,80,200,.3);border:1px solid #0055cc;color:#88aaff}
+    #ai-thinking{position:absolute;bottom:105px;right:calc(25% - 60px);font-size:.7em;color:#88aaff;letter-spacing:1px;text-shadow:0 0 6px #000;z-index:20;opacity:0;transition:opacity .3s;}
+    #ai-thinking.show{opacity:1}
+  </style>
+</head>
+<body>
+<div id="arena">
+  <div id="arena-overlay"></div>
+  <div class="torch left">🔥</div>
+  <div class="torch right">🔥</div>
+  <div id="crit-flash"></div>
+  <div id="crit-text">⚔️ CRITICAL HIT! ⚔️</div>
+  <div id="round-banner"><div id="round-banner-text"></div></div>
+  <div id="ai-thinking">🤖 Brutus is thinking...</div>
+  <div id="hud">
+    <div class="hp-panel">
+      <div class="hp-label" id="name-p1-hud">MAXIMUS</div>
+      <div class="hp-bar-outer"><div class="hp-bar-inner p1" id="hp-bar-p1" style="width:100%"></div></div>
+      <div class="hp-number" id="hp-num-p1">100 HP</div>
+    </div>
+    <div id="timer-panel">
+      <div id="timer-number">10</div>
+      <div id="timer-bar-outer"><div id="timer-bar-inner" style="width:100%"></div></div>
+    </div>
+    <div class="hp-panel right">
+      <div class="hp-label" id="name-p2-hud" style="text-align:right">BRUTUS</div>
+      <div class="hp-bar-outer"><div class="hp-bar-inner p2" id="hp-bar-p2" style="width:100%;float:right"></div></div>
+      <div class="hp-number" id="hp-num-p2" style="text-align:right">100 HP</div>
+    </div>
+  </div>
+  <div id="phase-banner"><div id="phase-text">CHOOSE YOUR ACTION</div></div>
+  <div id="fighters">
+    <!-- MAXIMUS (P1) -->
+    <div class="fighter-wrap" id="fighter-p1">
+      <div class="player-badge p1">YOU — MAXIMUS</div>
+      <div class="blood-drip">🩸</div>
+      <div class="fighter-instruction" id="instr-p1">⚔️ Choose where to ATTACK</div>
+      <div style="position:relative;display:inline-block">
+        <svg class="gladiator-svg" viewBox="0 0 170 270" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="85" cy="262" rx="48" ry="9" fill="rgba(0,0,0,.45)"/>
+          <rect x="56" y="188" width="24" height="60" rx="9" fill="#8B6914"/>
+          <rect x="86" y="188" width="24" height="60" rx="9" fill="#7a5a10"/>
+          <rect x="55" y="210" width="26" height="38" rx="6" fill="#D4A820"/>
+          <rect x="55" y="210" width="26" height="38" rx="6" fill="none" stroke="#ffd700" stroke-width="1"/>
+          <rect x="85" y="210" width="26" height="38" rx="6" fill="#C89A18"/>
+          <rect x="85" y="210" width="26" height="38" rx="6" fill="none" stroke="#D4A820" stroke-width="1"/>
+          <rect x="52" y="244" width="30" height="12" rx="4" fill="#5c3010"/>
+          <rect x="82" y="244" width="30" height="12" rx="4" fill="#4a2808"/>
+          <rect x="48" y="172" width="74" height="22" rx="5" fill="#D4A820"/>
+          <rect x="52" y="172" width="8" height="22" rx="3" fill="#cc2200" opacity=".8"/>
+          <rect x="62" y="172" width="8" height="22" rx="3" fill="#cc2200" opacity=".8"/>
+          <rect x="72" y="172" width="8" height="22" rx="3" fill="#cc2200" opacity=".8"/>
+          <rect x="82" y="172" width="8" height="22" rx="3" fill="#cc2200" opacity=".8"/>
+          <rect x="92" y="172" width="8" height="22" rx="3" fill="#cc2200" opacity=".8"/>
+          <rect x="102" y="172" width="8" height="22" rx="3" fill="#cc2200" opacity=".8"/>
+          <path d="M42,95 Q85,82 128,95 L126,175 Q85,185 44,175 Z" fill="#C89A18"/>
+          <path d="M65,100 Q85,90 105,100 L103,150 Q85,158 67,150 Z" fill="#D4A820" stroke="#ffd700" stroke-width="1"/>
+          <line x1="85" y1="92" x2="85" y2="168" stroke="#a07010" stroke-width="1.5" opacity=".6"/>
+          <path d="M67,115 Q85,108 103,115" fill="none" stroke="#a07010" stroke-width="1.5" opacity=".5"/>
+          <line x1="69" y1="128" x2="101" y2="128" stroke="#a07010" stroke-width="1.2" opacity=".4"/>
+          <line x1="69" y1="142" x2="101" y2="142" stroke="#a07010" stroke-width="1.2" opacity=".4"/>
+          <ellipse cx="44" cy="96" rx="16" ry="12" fill="#D4A820" stroke="#ffd700" stroke-width="1.5"/>
+          <ellipse cx="126" cy="96" rx="16" ry="12" fill="#D4A820" stroke="#ffd700" stroke-width="1.5"/>
+          <line x1="44" y1="108" x2="18" y2="140" stroke="#8B6914" stroke-width="11" stroke-linecap="round"/>
+          <ellipse cx="12" cy="148" rx="20" ry="28" fill="#8B2500" stroke="#D4A820" stroke-width="3"/>
+          <ellipse cx="12" cy="148" rx="14" ry="21" fill="#A03010" stroke="#ffd700" stroke-width="1.5"/>
+          <path d="M5,142 L12,133 L19,142 L15,152 L12,147 L9,152 Z" fill="#ffd700"/>
+          <circle cx="12" cy="148" r="5" fill="#C87000" stroke="#ffd700" stroke-width="1.2"/>
+          <line x1="126" y1="104" x2="148" y2="88" stroke="#8B6914" stroke-width="12" stroke-linecap="round"/>
+          <line x1="148" y1="88" x2="160" y2="70" stroke="#8B6914" stroke-width="10" stroke-linecap="round"/>
+          <circle cx="162" cy="67" r="8" fill="#8B6914"/>
+          <ellipse cx="162" cy="67" rx="7" ry="5" fill="#8B4513" stroke="#D4A820" stroke-width="1.5"/>
+          <rect x="159" y="45" width="7" height="20" rx="3" fill="#5c2800"/>
+          <rect x="152" y="43" width="22" height="5" rx="2.5" fill="#D4A820" stroke="#ffd700" stroke-width="1"/>
+          <path d="M159,10 L165,10 L163,43 L159,43 Z" fill="#E0E0E8" stroke="#C0C0C8" stroke-width=".8"/>
+          <line x1="162" y1="14" x2="162" y2="40" stroke="rgba(255,255,255,.4)" stroke-width="1.5"/>
+          <path d="M159,10 L162,2 L165,10 Z" fill="#D0D0D8"/>
+          <rect x="73" y="72" width="24" height="22" rx="8" fill="#7a5a10"/>
+          <rect x="69" y="82" width="32" height="12" rx="5" fill="#C89A18" stroke="#ffd700" stroke-width="1"/>
+          <path d="M44,74 Q85,35 126,74 L124,90 Q85,82 46,90 Z" fill="#D4A820"/>
+          <path d="M44,74 Q36,82 40,94 Q46,96 50,90 L48,74 Z" fill="#C89A18"/>
+          <path d="M126,74 Q134,82 130,94 Q124,96 120,90 L122,74 Z" fill="#C89A18"/>
+          <path d="M58,68 Q85,58 112,68 L112,86 Q85,92 58,86 Z" fill="#1a0800"/>
+          <rect x="60" y="70" width="50" height="8" rx="4" fill="#1a0400"/>
+          <path d="M58,68 Q50,75 52,88 Q58,92 62,88 L60,68 Z" fill="#B88A14"/>
+          <path d="M112,68 Q120,75 118,88 Q112,92 108,88 L110,68 Z" fill="#B88A14"/>
+          <rect x="75" y="36" width="20" height="8" rx="4" fill="#A07010"/>
+          <path d="M72,36 Q85,8 98,36" fill="none" stroke="#cc1100" stroke-width="7" stroke-linecap="round"/>
+          <path d="M75,35 Q85,10 95,35" fill="none" stroke="#dd2200" stroke-width="5" stroke-linecap="round"/>
+          <path d="M78,34 Q85,14 92,34" fill="none" stroke="#ee3300" stroke-width="3" stroke-linecap="round"/>
+          <path d="M60,55 Q85,45 110,55" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="3" stroke-linecap="round"/>
+          <path d="M46,90 Q85,82 124,90" fill="none" stroke="#ffd700" stroke-width="1.5"/>
+        </svg>
+        <div class="zone-circles" id="zones-p1">
+          <div class="zone-circle" id="p1-zone-head" style="top:4px;left:30px;width:110px;height:96px" data-zone="head"><span class="zone-label">HEAD</span></div>
+          <div class="zone-circle" id="p1-zone-body" style="top:90px;left:20px;width:130px;height:90px" data-zone="body"><span class="zone-label">BODY</span></div>
+          <div class="zone-circle" id="p1-zone-legs" style="top:170px;left:26px;width:118px;height:92px" data-zone="legs"><span class="zone-label">LEGS</span></div>
+        </div>
+        <div class="shield-overlay" id="shield-overlay-p1">🛡️</div>
+      </div>
+      <div class="fighter-name" id="name-p1-label">MAXIMUS</div>
+    </div>
+    <!-- BRUTUS (AI) -->
+    <div class="fighter-wrap" id="fighter-p2">
+      <div class="player-badge p2">AI — BRUTUS</div>
+      <div class="blood-drip">🩸</div>
+      <div class="fighter-instruction" id="instr-p2"></div>
+      <div style="position:relative;display:inline-block">
+        <svg class="gladiator-svg" viewBox="0 0 170 270" xmlns="http://www.w3.org/2000/svg" style="transform:scaleX(-1)">
+          <ellipse cx="85" cy="262" rx="48" ry="9" fill="rgba(0,0,0,.45)"/>
+          <rect x="56" y="188" width="24" height="60" rx="9" fill="#1a3060"/>
+          <rect x="86" y="188" width="24" height="60" rx="9" fill="#162850"/>
+          <rect x="55" y="210" width="26" height="38" rx="6" fill="#2a4a8a"/>
+          <rect x="55" y="210" width="26" height="38" rx="6" fill="none" stroke="#4488cc" stroke-width="1"/>
+          <rect x="85" y="210" width="26" height="38" rx="6" fill="#224080"/>
+          <rect x="85" y="210" width="26" height="38" rx="6" fill="none" stroke="#3a70b0" stroke-width="1"/>
+          <rect x="52" y="244" width="30" height="12" rx="4" fill="#0a1a3a"/>
+          <rect x="82" y="244" width="30" height="12" rx="4" fill="#08152e"/>
+          <rect x="48" y="172" width="74" height="22" rx="5" fill="#2a4a8a"/>
+          <rect x="52" y="172" width="8" height="22" rx="3" fill="#0044aa" opacity=".85"/>
+          <rect x="62" y="172" width="8" height="22" rx="3" fill="#0044aa" opacity=".85"/>
+          <rect x="72" y="172" width="8" height="22" rx="3" fill="#0044aa" opacity=".85"/>
+          <rect x="82" y="172" width="8" height="22" rx="3" fill="#0044aa" opacity=".85"/>
+          <rect x="92" y="172" width="8" height="22" rx="3" fill="#0044aa" opacity=".85"/>
+          <rect x="102" y="172" width="8" height="22" rx="3" fill="#0044aa" opacity=".85"/>
+          <path d="M42,95 Q85,82 128,95 L126,175 Q85,185 44,175 Z" fill="#1a3a70"/>
+          <path d="M65,100 Q85,90 105,100 L103,150 Q85,158 67,150 Z" fill="#2a4a88" stroke="#4488cc" stroke-width="1"/>
+          <line x1="85" y1="92" x2="85" y2="168" stroke="#0a2050" stroke-width="1.5" opacity=".6"/>
+          <path d="M67,115 Q85,108 103,115" fill="none" stroke="#0a2050" stroke-width="1.5" opacity=".5"/>
+          <line x1="69" y1="128" x2="101" y2="128" stroke="#0a2050" stroke-width="1.2" opacity=".4"/>
+          <line x1="69" y1="142" x2="101" y2="142" stroke="#0a2050" stroke-width="1.2" opacity=".4"/>
+          <ellipse cx="44" cy="96" rx="16" ry="12" fill="#2a4a88" stroke="#4488cc" stroke-width="1.5"/>
+          <ellipse cx="126" cy="96" rx="16" ry="12" fill="#2a4a88" stroke="#4488cc" stroke-width="1.5"/>
+          <line x1="44" y1="108" x2="18" y2="140" stroke="#1a3060" stroke-width="11" stroke-linecap="round"/>
+          <rect x="-4" y="120" width="34" height="56" rx="5" fill="#0a1a4a" stroke="#2a5a9a" stroke-width="3"/>
+          <rect x="1" y="125" width="24" height="46" rx="3" fill="#0e2260" stroke="#4488cc" stroke-width="1.5"/>
+          <path d="M8,135 L18,143 L14,143 L20,158 L12,150 L16,150 Z" fill="#88aaff"/>
+          <circle cx="12" cy="148" r="5" fill="#1a3a7a" stroke="#4488cc" stroke-width="1.2"/>
+          <line x1="126" y1="104" x2="148" y2="88" stroke="#1a3060" stroke-width="12" stroke-linecap="round"/>
+          <line x1="148" y1="88" x2="160" y2="70" stroke="#1a3060" stroke-width="10" stroke-linecap="round"/>
+          <circle cx="162" cy="67" r="8" fill="#1a3060"/>
+          <ellipse cx="162" cy="67" rx="7" ry="5" fill="#0a1a3a" stroke="#2a5a9a" stroke-width="1.5"/>
+          <rect x="159" y="45" width="7" height="20" rx="3" fill="#080e20"/>
+          <rect x="152" y="43" width="22" height="5" rx="2.5" fill="#2a5a9a" stroke="#4488cc" stroke-width="1"/>
+          <path d="M163,43 Q170,28 158,10 Q154,4 160,2 Q170,5 168,18 Q172,32 166,43 Z" fill="#C8C8D8" stroke="#A0A0B8" stroke-width=".8"/>
+          <path d="M163,40 Q169,26 160,10" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+          <rect x="73" y="72" width="24" height="22" rx="8" fill="#1a3060"/>
+          <rect x="69" y="82" width="32" height="12" rx="5" fill="#2a4a88" stroke="#4488cc" stroke-width="1"/>
+          <path d="M44,74 Q85,35 126,74 L124,90 Q85,82 46,90 Z" fill="#2a4a88"/>
+          <path d="M44,74 Q36,82 40,94 Q46,96 50,90 L48,74 Z" fill="#1a3a70"/>
+          <path d="M126,74 Q134,82 130,94 Q124,96 120,90 L122,74 Z" fill="#1a3a70"/>
+          <path d="M58,68 Q85,58 112,68 L112,86 Q85,92 58,86 Z" fill="#0a0a18"/>
+          <rect x="60" y="70" width="50" height="8" rx="4" fill="#08081a"/>
+          <path d="M58,68 Q50,75 52,88 Q58,92 62,88 L60,68 Z" fill="#1a3a70"/>
+          <path d="M112,68 Q120,75 118,88 Q112,92 108,88 L110,68 Z" fill="#1a3a70"/>
+          <rect x="80" y="18" width="10" height="26" rx="3" fill="#1a3060"/>
+          <path d="M77,18 Q85,0 93,18 L91,36 Q85,32 79,36 Z" fill="#2a5a9a" stroke="#4488cc" stroke-width="1.5"/>
+          <path d="M60,55 Q85,45 110,55" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="3" stroke-linecap="round"/>
+          <path d="M46,90 Q85,82 124,90" fill="none" stroke="#4488cc" stroke-width="1.5"/>
+        </svg>
+        <div class="zone-circles" id="zones-p2">
+          <div class="zone-circle" id="p2-zone-head" style="top:4px;left:30px;width:110px;height:96px" data-zone="head"><span class="zone-label">HEAD</span></div>
+          <div class="zone-circle" id="p2-zone-body" style="top:90px;left:20px;width:130px;height:90px" data-zone="body"><span class="zone-label">BODY</span></div>
+          <div class="zone-circle" id="p2-zone-legs" style="top:170px;left:26px;width:118px;height:92px" data-zone="legs"><span class="zone-label">LEGS</span></div>
+        </div>
+        <div class="shield-overlay" id="shield-overlay-p2">🛡️</div>
+      </div>
+      <div class="fighter-name">BRUTUS</div>
+    </div>
+  </div>
+  <div id="action-log"></div>
+  <div id="result-overlay">
+    <div id="result-title">⚔️ VICTORY ⚔️</div>
+    <div id="result-sub">THE CROWD ROARS</div>
+    <div id="result-points"></div>
+    <button id="btn-restart">⚔️ FIGHT AGAIN ⚔️</button>
+  </div>
+</div>
+
+<div id="intro-screen">
+  <div id="intro-title">⚔️ FIGHT CLUB ⚔️</div>
+  <div id="intro-subtitle">GLADIATORIAL ARENA</div>
+  <div class="player-input-group">
+    <label>🔴 YOUR NAME</label>
+    <input type="text" id="input-p1" placeholder="MAXIMUS" maxlength="12"/>
+  </div>
+  <button id="btn-start-game">⚔️ ENTER THE ARENA ⚔️</button>
+  <div id="intro-rules">
+    You are Maximus. Brutus is the AI.<br>
+    Each gladiator has <b>100 HP</b>.<br>
+    When <b>attacking</b>: click a zone on <b>Brutus</b> (right).<br>
+    When <b>defending</b>: click a zone on <b>yourself</b> (left).<br>
+    You have <b>10 seconds</b> to choose.<br>
+    Win = <b>+100 points</b> on Play.fun! 🏆
+  </div>
+</div>
+
+<script>
+// ==================== PLAY.FUN SDK (protected) ====================
+const POINTS_PER_WIN  = 100;
+const POINTS_COOLDOWN = 60 * 1000;
+let lastPointsAt = 0;
+let sdk = null;
+
+function wrapSDK(instance) {
+  const _origAdd = instance.addPoints.bind(instance);
+  const _origEnd = instance.endGame.bind(instance);
+  let _authorized = false;
+
+  instance.addPoints = function(pts) {
+    if (!_authorized) {
+      console.warn('[SDK] addPoints blocked — play the game to earn points');
+      return Promise.resolve();
+    }
+    return _origAdd(Math.min(Math.abs(parseInt(pts) || 0), POINTS_PER_WIN));
+  };
+
+  instance.endGame = function() {
+    if (!_authorized) {
+      console.warn('[SDK] endGame blocked — play the game to earn points');
+      return Promise.resolve();
+    }
+    _authorized = false;
+    return _origEnd();
+  };
+
+  instance._gameAuthorize = function() {
+    const now = Date.now();
+    const elapsed = now - lastPointsAt;
+    if (lastPointsAt > 0 && elapsed < POINTS_COOLDOWN) {
+      return { ok: false, wait: Math.ceil((POINTS_COOLDOWN - elapsed) / 1000) };
+    }
+    lastPointsAt = now;
+    _authorized = true;
+    return { ok: true };
+  };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    sdk = new OpenGameSDK({ ui: { usePointsWidget: true, theme: 'dark' } });
+    sdk.on('OnReady', () => console.log('[SDK] Ready'));
+    sdk.init()
+      .then(() => { wrapSDK(sdk); console.log('[SDK] Initialized & protected'); })
+      .catch(e => console.warn('[SDK] Init error:', e));
+  } catch(e) {
+    console.warn('[SDK] Not available:', e);
+  }
+});
+
+// ==================== GAME ====================
+const ZONES = ['head','body','legs'];
+const TIMER_MAX = 10;
+const DMG_MIN = 25, DMG_MAX = 52, CRIT_THRESH = 44, LOW_HP = 33;
+
+let state = {
+  hp:[100,100], names:['MAXIMUS','BRUTUS'],
+  phase:'idle', attackTurn:0,
+  playerChoice:null, aiChoice:null,
+  timerVal:TIMER_MAX, timerInterval:null, round:0,
+};
+
+const $ = id => document.getElementById(id);
+const hpBars    = [$('hp-bar-p1'),$('hp-bar-p2')];
+const hpNums    = [$('hp-num-p1'),$('hp-num-p2')];
+const fighters  = [$('fighter-p1'),$('fighter-p2')];
+const instrEls  = [$('instr-p1'),$('instr-p2')];
+const shieldOvl = [$('shield-overlay-p1'),$('shield-overlay-p2')];
+const timerNum  = $('timer-number');
+const timerBar  = $('timer-bar-inner');
+const phaseText = $('phase-text');
+const actionLog = $('action-log');
+const critFlash = $('crit-flash');
+const critText  = $('crit-text');
+const roundBanner    = $('round-banner');
+const roundBannerTxt = $('round-banner-text');
+const resultOverlay  = $('result-overlay');
+const resultTitle    = $('result-title');
+const resultSub      = $('result-sub');
+const resultPoints   = $('result-points');
+const aiThinking     = $('ai-thinking');
+const zoneEls = [
+  {head:$('p1-zone-head'),body:$('p1-zone-body'),legs:$('p1-zone-legs')},
+  {head:$('p2-zone-head'),body:$('p2-zone-body'),legs:$('p2-zone-legs')},
+];
+
+$('btn-start-game').addEventListener('click',()=>{
+  const n1=($('input-p1').value.trim().toUpperCase()||'MAXIMUS').slice(0,12);
+  state.names[0]=n1; $('name-p1-hud').textContent=n1; $('name-p1-label').textContent=n1;
+  $('intro-screen').style.display='none'; startRound();
+});
+$('btn-restart').addEventListener('click',()=>{
+  resultOverlay.classList.remove('show');
+  state.hp=[100,100]; state.round=0; state.attackTurn=0;
+  updateHPBars(); updateLowHP(); startRound();
+});
+
+document.querySelectorAll('.zone-circle').forEach(el=>{
+  el.addEventListener('click',()=>{
+    if(state.phase!=='choosing'||state.playerChoice!==null) return;
+    const inP1=!!el.closest('#zones-p1'), inP2=!!el.closest('#zones-p2');
+    const zone=el.dataset.zone;
+    if(state.attackTurn===0){
+      if(!inP2) return;
+      state.playerChoice=zone;
+      ZONES.forEach(z=>zoneEls[1][z].classList.remove('attack-zone','defend-zone','selected-zone'));
+      zoneEls[1][zone].classList.add('selected-zone');
+      instrEls[0].textContent='⚔️ Striking '+zone.toUpperCase()+'...';
+    } else {
+      if(!inP1) return;
+      state.playerChoice=zone;
+      ZONES.forEach(z=>zoneEls[0][z].classList.remove('attack-zone','defend-zone','selected-zone'));
+      zoneEls[0][zone].classList.add('selected-zone');
+      instrEls[0].textContent='🛡️ Guarding '+zone.toUpperCase()+'...';
+    }
+    checkReady();
+  });
+});
+
+function clearAllZones(){document.querySelectorAll('.zone-circle').forEach(el=>el.classList.remove('attack-zone','defend-zone','selected-zone'));}
+function activateZones(i,type){ZONES.forEach(z=>{zoneEls[i][z].classList.remove('attack-zone','defend-zone','selected-zone');zoneEls[i][z].classList.add(type==='attack'?'attack-zone':'defend-zone');});}
+
+function startTimer(){
+  state.timerVal=TIMER_MAX; timerNum.textContent=TIMER_MAX;
+  timerNum.classList.remove('urgent'); timerBar.style.width='100%';
+  timerBar.style.background='linear-gradient(to right,#ff4400,#ffd700)';
+  clearInterval(state.timerInterval);
+  state.timerInterval=setInterval(()=>{
+    state.timerVal-=0.25;
+    const pct=Math.max(0,state.timerVal/TIMER_MAX*100);
+    timerNum.textContent=Math.ceil(state.timerVal); timerBar.style.width=pct+'%';
+    if(state.timerVal<=3){timerNum.classList.add('urgent');timerBar.style.background='#ff2200';}
+    if(state.timerVal<=0){
+      clearInterval(state.timerInterval);
+      if(state.playerChoice===null) state.playerChoice=ZONES[Math.floor(Math.random()*3)];
+      if(state.aiChoice===null)     state.aiChoice=ZONES[Math.floor(Math.random()*3)];
+      resolveRound();
+    }
+  },250);
+}
+function stopTimer(){clearInterval(state.timerInterval);timerNum.classList.remove('urgent');}
+function aiChoose(){return ZONES[Math.floor(Math.random()*3)];}
+
+function startRound(){
+  state.round++; state.playerChoice=null; state.aiChoice=aiChoose();
+  state.phase='choosing'; clearAllZones(); aiThinking.classList.remove('show');
+  if(state.attackTurn===0){
+    activateZones(1,'attack');
+    instrEls[0].textContent='⚔️ Strike Brutus — choose a zone!';
+    phaseText.textContent=`⚔️ ${state.names[0]} ATTACKS — pick a zone on Brutus`;
+  } else {
+    activateZones(0,'defend');
+    instrEls[0].textContent='🛡️ Guard yourself — choose a zone!';
+    phaseText.textContent=`🛡️ Brutus ATTACKS — guard a zone!`;
+    aiThinking.classList.add('show');
+  }
+  setLog(''); startTimer();
+}
+function checkReady(){
+  if(state.playerChoice!==null&&state.aiChoice!==null)
+    setTimeout(()=>{stopTimer();resolveRound();},450);
+}
+function resolveRound(){
+  if(state.phase!=='choosing') return;
+  state.phase='resolving'; stopTimer(); clearAllZones();
+  aiThinking.classList.remove('show'); instrEls[0].textContent='';
+  const att=state.attackTurn, def=1-att;
+  const aZone=att===0?state.playerChoice:state.aiChoice;
+  const dZone=att===0?state.aiChoice:state.playerChoice;
+  const hit=aZone!==dZone;
+  zoneEls[1][state.aiChoice].classList.add(att===0?'defend-zone':'attack-zone');
+  setTimeout(()=>clearAllZones(),1200);
+  if(hit){
+    const dmg=DMG_MIN+Math.floor(Math.random()*(DMG_MAX-DMG_MIN+1));
+    const isCrit=dmg>=CRIT_THRESH;
+    state.hp[def]=Math.max(0,state.hp[def]-dmg);
+    fighters[def].classList.add(isCrit?'crit-hit':'hurt');
+    setTimeout(()=>fighters[def].classList.remove('crit-hit','hurt'),750);
+    spawnDmgPopup(def,dmg,isCrit?'crit':'normal');
+    updateHPBars(); updateLowHP(); if(isCrit) triggerCrit();
+    const ze={head:'💀',body:'🩸',legs:'🦵'};
+    setLog(`${state.names[att]} strikes ${state.names[def]}'s ${aZone.toUpperCase()} ${ze[aZone]||''} for ${dmg} dmg!${isCrit?' ⚡ CRITICAL!':''}`);
+    showBanner(isCrit?`💥 ${dmg} CRITICAL!`:`🗡️ HIT — ${dmg} damage`,1700);
+    if(state.hp[def]<=0){setTimeout(()=>endGame(att),1900);return;}
+  } else {
+    shieldOvl[def].classList.add('show');
+    setTimeout(()=>shieldOvl[def].classList.remove('show'),950);
+    spawnDmgPopup(def,0,'blocked');
+    const who=att===0?`Brutus guarded ${dZone.toUpperCase()}`:`You blocked ${dZone.toUpperCase()}`;
+    setLog(`${state.names[att]} attacks ${aZone.toUpperCase()} — ${who}! 🛡️`);
+    showBanner('🛡️ BLOCKED!',1400);
+  }
+  state.attackTurn=1-state.attackTurn;
+  setTimeout(()=>{if(state.phase!=='gameover') startRound();},2100);
+}
+function updateHPBars(){
+  for(let i=0;i<2;i++){
+    const p=Math.max(0,state.hp[i]);
+    hpBars[i].style.width=p+'%'; hpNums[i].textContent=state.hp[i]+' HP';
+    if(p<=33) hpBars[i].style.background='linear-gradient(to right,#660000,#cc0000)';
+    else if(p<=60) hpBars[i].style.background='linear-gradient(to right,#884400,#cc6600)';
+  }
+}
+function updateLowHP(){for(let i=0;i<2;i++) fighters[i].classList.toggle('low-hp',state.hp[i]<LOW_HP);}
+function spawnDmgPopup(idx,dmg,type){
+  const el=document.createElement('div');
+  el.className='damage-popup '+type;
+  el.textContent=type==='blocked'?'BLOCKED!':(type==='crit'?'💥 '+dmg:String(dmg));
+  el.style.left=(idx===0?'14%':'62%'); el.style.top='28%';
+  $('arena').appendChild(el); setTimeout(()=>el.remove(),1400);
+}
+function triggerCrit(){
+  critFlash.classList.add('active'); critText.classList.add('show'); spawnSparks();
+  setTimeout(()=>{critFlash.classList.remove('active');critText.classList.remove('show');},1600);
+}
+function spawnSparks(){
+  for(let i=0;i<20;i++){
+    const s=document.createElement('div'); s.className='spark';
+    const angle=Math.random()*Math.PI*2, dist=70+Math.random()*130;
+    const sx=window.innerWidth/2, sy=window.innerHeight*.38;
+    s.style.cssText=`left:${sx}px;top:${sy}px;width:${4+Math.random()*6}px;height:${4+Math.random()*6}px;background:${Math.random()>.5?'#ffd700':'#ff5500'};position:absolute;border-radius:50%;pointer-events:none;z-index:32`;
+    $('arena').appendChild(s);
+    const tx=sx+Math.cos(angle)*dist,ty=sy+Math.sin(angle)*dist;
+    s.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${tx-sx}px,${ty-sy}px) scale(0)`,opacity:0}],
+      {duration:500+Math.random()*400,easing:'ease-out'}).onfinish=()=>s.remove();
+  }
+}
+function showBanner(txt,dur){
+  roundBannerTxt.textContent=txt; roundBanner.classList.add('show');
+  setTimeout(()=>roundBanner.classList.remove('show'),dur);
+}
+function setLog(txt){actionLog.textContent=txt;}
+
+function endGame(winnerIdx){
+  state.phase='gameover'; stopTimer(); clearAllZones();
+  const won=winnerIdx===0;
+  resultTitle.textContent=won?'🏆 VICTORY!':'💀 DEFEAT...';
+  resultSub.textContent=won
+    ?`Brutus has fallen! Rome cheers for ${state.names[0]}!`
+    :`${state.names[0]} has been defeated. Brutus reigns supreme!`;
+
+  if(won && sdk && sdk._gameAuthorize){
+    const auth=sdk._gameAuthorize();
+    if(auth.ok){
+      resultPoints.textContent=`+${POINTS_PER_WIN} points awarded! 🏅`;
+      sdk.addPoints(POINTS_PER_WIN).then(()=>sdk.endGame()).catch(e=>console.warn('[SDK]',e));
+    } else {
+      resultPoints.textContent=`⏳ Points cooldown — wait ${auth.wait}s`;
+    }
+  } else {
+    resultPoints.textContent='';
+  }
+  resultOverlay.classList.add('show');
+}
+</script>
+</body>
+</html>
